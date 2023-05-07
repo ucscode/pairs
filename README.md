@@ -23,11 +23,13 @@ The Pairs class allows you to create a meta table that consists of key-value pai
 - Retrieve reference data based on key and reference ID
 - Remove reference data based on key and reference ID
 - Retrieve all data associated with a specific reference ID or matching a given pattern
+- Utilizes the sQuery library for efficient SQL query generation.
 
 ## Requirements
 
-- PHP 5.6 or higher
+- PHP 7.4 or higher
 - MySQLi extension
+- [sQuery](https://github.com/ucscode/squery) library (required for efficient query generation)
 
 ## Installation
 
@@ -41,13 +43,26 @@ The Pairs class allows you to create a meta table that consists of key-value pai
 
 ## Usage
 
+1. Create an instance of the Pairs class by providing a MySQLi object and the name of the meta table:
+
 ```php
+// Create a new instance of the MySQLi
+$mysqli = new mysqli('localhost', 'username', 'password', 'database');
+
 // Create a new instance of the Pairs class
 $pairs = new Pairs($mysqli, 'meta_table');
+```
 
+2. You can optionally link a parent table to the meta table
+
+```php
 // Link the meta table to a parent table
 $pairs->linkParentTable('parent_table', 'foreign_key_constraint', 'primary_key', 'CASCADE');
+```
 
+3. Use the various methods provided by the Pairs class to interact with the key-value data:
+
+```php
 // Add or update a reference data
 $pairs->set('key', 'value', $ref);
 
