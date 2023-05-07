@@ -38,7 +38,8 @@ The Pairs class allows you to create a meta table that consists of key-value pai
 3. Include the `pairs.php` file in your PHP script:
 
    ```php
-   require_once('path/to/pairs.php');
+   require_once 'path/to/sQuery.php';
+   require_once 'path/to/pairs.php';
    ```
 
 ## Usage
