@@ -1,24 +1,29 @@
 <?php 
 /**
- * Meta Table Generator
+ * A Meta Data Storage System
  *
- * The pairs class creates a meta table for data references.
- * The table create may (or may not) implement foreign key that references another table.
- * The columns contained in the meta table includes:
+ * The Pairs class represents a utility for managing a meta table that stores key-value pairs.
+ * It provides methods to create the meta table, link it to a parent table, add or update reference data,
+ * retrieve reference data based on keys and reference IDs, remove reference data, and retrieve all data
+ * associated with a specific reference ID or matching a certain pattern.
  *
- * - id: unique id for a row
- * - _ref: A reference id (may also be null)
- * - _key: The key of the data
- * - _value: The value of the data
- * - epoch: The time at which the data was inserted
+ * The class relies on the `sQuery` class to execute SQL queries. It requires a valid instance of the `MYSQLI` class
+ * and the name of the meta table to work with.
  *
- * @author ucscode <uche23mail@gmail.com>
- * @link http://github.com/ucscode
- * @version 1.1.3
- * @copyright Copyright (c) 2023
+ * ### Usage example:
+ * ```php
+ * $mysqli = new mysqli('localhost', 'username', 'password', 'database');
+ * $pairs = new Pairs($mysqli, 'meta_table');
+ * $pairs->set('key1', 'value1', 1); // Add or update reference data with key 'key1' and reference ID 1
+ * $data = $pairs->get('key1', 1); // Retrieve the value associated with key 'key1' and reference ID 1
+ * $pairs->remove('key1', 1); // Remove the reference data with key 'key1' and reference ID 1
+ * ```
+ *
  * @package pairs
+ * @author ucscode
+ * @see sQuery https://github.com/ucscode/sQuery
+ * @link https://github.com/ucscode/pairs
  */
-
 class pairs {
 	
 	/**
@@ -36,9 +41,18 @@ class pairs {
 	/**
 	 * Constructor Method
 	 *
-	 * @param MYSQLI $mysqli
-	 * @param string $tablename
-	 * @throws Exception If sQuery class is not found
+	 * Initializes a new instance of the Pairs class.
+	 * It requires an instance of the `MYSQLI` class and the name of the meta table to work with.
+	 *
+	 * - Throws an exception if the required `sQuery` class is not found.
+	 * - Automatically creates the meta table if it doesn't already exist.
+	 *
+	 * @param MYSQLI $mysqli An instance of the MYSQLI class for database connection.
+	 * @param string $tablename The name of the meta table.
+	 * @throws Exception If the `sQuery` class is not found.
+	 * @return void
+	 *
+	 * @throws Exception If sQuery class is not found.
 	 */
 	public function __construct( MYSQLI $mysqli, string $tablename ) {
 		
@@ -58,8 +72,9 @@ class pairs {
 	/**
 	 * Create a meta table
 	 *
-	 * @return boolean
-	 * 
+	 * Creates a meta table in the database if it doesn't already exist. 
+	 *
+	 * @return bool Returns `true` if the table creation query is successful, `false` otherwise.
 	 */
 	protected function createTable() {
 
@@ -77,24 +92,16 @@ class pairs {
 		
 	}
 	
-	/*
-		Link the meta table to it's parent table
-	*/
-	
 	/**
-	 * Link to parent table 
-	 * 
-	 * Applies a foreign key to the `_ref` column. 
-	 * The foreign references the parent table.
-	 * The `ON DELETE` action can be specified on the 3rd parameter
+	 * Link to parent table
 	 *
-	 * @param string $parent_table The name of the parent table
-	 * @param string $constraint The unique constaint of the foreign key
-	 * @param string $primary_key The primary key (or reference column) of the parent table
-	 * @param string $action The action to take on delete (CASCADE|RESTRICT|SET NULL)
-	 * 
-	 * @return boolean
-	 * 
+	 * Applies a foreign key constraint to the `_ref` column of the meta table. Thus, referencing the parent table.
+	 *
+	 * @param string $parent_table The name of the parent table.
+	 * @param string $constraint The unique constraint name for the foreign key.
+	 * @param string $primary_key The primary key column of the parent table. Default column is assumed to be `id`.
+	 * @param string $action The action to take on delete (CASCADE, RESTRICT, SET NULL). Default is 'CASCADE'.
+	 * @return bool Returns `true` if the foreign key constraint is added or already exists, `false` otherwise.
 	 */
 	public function linkParentTable( string $parent_table, string $constraint, string $primary_key = 'id', string $action = 'CASCADE' ) {
 		
@@ -124,14 +131,12 @@ class pairs {
 	
 	/**
 	 * Check comparism type
-	 * 
-	 * When executing SQL Query, linear values can be tested as `number = 3`, but `NULL` is tested as `number IS NULL`.
-	 * Therefore, the method checks for `NULL` type and derive the appropriate test query
 	 *
-	 * @param int|null $ref
-	 * 
-	 * @return string 
-	 * 
+	 * Determines the comparison type based on the provided reference ID.
+	 *
+	 * @param int|null $ref The reference ID to check.
+	 * @return string Returns the comparison string for the reference ID. If the reference ID is null, it returns 'IS NULL', otherwise ' = [reference ID]'.
+	 * @ignore
 	 */
 	private function test( ?int $ref = null ) {
 		if( is_null($ref) ) $test = " IS " . sQuery::val( $ref );
@@ -141,30 +146,19 @@ class pairs {
 	
 	/**
 	 * Add or update a reference data
-	 * 
-	 * This method adds a new reference data if it does not exists.
-	 * Else, it updates the reference data
-	 * 
-	 * A reference data is considered unique if both the key and the reference id exists and does not match any other key/ref id on the table.
-	 * 
-	 * #### Example:
-	 * - `_ref = NULL` &amp; `key = name` &mdash; unique
-	 * - `_ref = 1` &amp; `key = name` &mdash; unique
-	 * - `_ref = 2` &amp; `key = name` &mdash; unique
 	 *
-	 * Every data saved in the reference table are stored in json format.
-	 * Therefore, it accepts a wide range of argument including array and objects.
-	 * However, you should be aware that if an object is passed as an argument, it will be returned as an array when retreived.
-	 * Also, it is not advisable to pass argument such as `function` to this method as it will never return the expected output
-	 * 
-	 * Note: Do not use `mysqli::real_escape_string` on the `$value` being passed to this method as it already contains one. Otherwise, it may return values containing unexpected multiple backslashes that are not required.
-	 * 
-	 * @param string $key The key of the reference data
-	 * @param mixed $value The value of the reference data
-	 * @param int|null $ref The id of the reference data
-	 * 
-	 * @return mixed
-	 * 
+	 * This method adds a new reference data if it does not exist. Otherwise, it updates the existing reference data.
+	 * The reference data is considered unique if **both** the key and the reference ID exist and do not match any other key/reference ID in the table.
+	 *
+	 * The value of the reference data can be of any type, as it will be encoded into `JSON` format before being stored in the database.
+	 *
+	 * Note that if an `object` is passed as the value, it will be returned as an `array` when retrieved.
+	 * It is important to ensure that the value being passed does not require additional escaping, as the method already applies the necessary escaping using `real_escape_string()`.
+	 *
+	 * @param string $key The key of the reference data.
+	 * @param mixed $value The value of the reference data.
+	 * @param int|null $ref The ID of the reference data. Defaults to `null`.
+	 * @return mixed Returns the result of the query execution. That is, `true` on success, `false` on failure.
 	 */
 	public function set(string $key, $value, ?int $ref = null) {
 		
@@ -194,21 +188,18 @@ class pairs {
 	}
 	
 	/**
-	 * Get the value of a reference data based on key &amp; reference id
-	 * 
-	 * If reference id is not given, it will default to `NULL`
-	 * Reference ID is essential to distinguish data.
-	 * 
-	 * For example: If the pairs class is used to create a meta table for a set of registered users, then, the reference id can be used to indicate which user is associated to the inserted data.
+	 * Retrieve a reference data by key and reference ID
 	 *
-	 * If parameter 3 is set to true, then it will return the timestamp (the unix time at which the data was inserted) rather than the value of the key provided
-	 * 
-	 * @param string $key The key of the reference data
-	 * @param int|null $ref The id of reference data
-	 * @param bool $epoch
-	 * 
-	 * @return mixed
-	 * 
+	 * This method retrieves a reference data from the table based on the provided key and reference ID.
+	 * If the reference data exists, it is returns. Otherwise, it returns `null`.
+	 *
+	 * If the third parameter is set to `true`, the unix timestamp at which the data was 
+	 * inserted will be returned instead of the value.
+	 *
+	 * @param string $key The key of the reference data to retrieve.
+	 * @param int|null $ref The ID of the reference data. Defaults to `null`.
+	 * @param bool $epoch Determines whether to retrieve the reference data or a unix timestamp which indicates the date of insertion. Defaults to `false`.
+	 * @return mixed|null Returns the reference data as an associative array if found. Returns null if no matching reference data is found.
 	 */
 	public function get( string $key, ?int $ref = null, bool $epoch = false ) {
 		
@@ -224,15 +215,14 @@ class pairs {
 	}
 	
 	/**
-	 * Remove | Delete a data
+	 * Remove reference data by key and reference ID
 	 *
-	 * If any data matches both the key and reference id, the data will be removed from the meta table
-	 * 
-	 * @param string $key
-	 * @param int|null $ref
-	 * 
-	 * @return boolean
-	 * 
+	 * This method removes the reference data from the table based on the provided key and reference ID.
+	 * If the reference data matching the key and reference ID is found, it will be deleted from the table.
+	 *
+	 * @param string $key The key of the reference data to remove.
+	 * @param int|null $ref The ID of the reference data. Defaults to null.
+	 * @return bool Returns `true` if the reference data is successfully removed. Returns `false` otherwise.
 	 */
 	public function remove(string $key, ?int $ref = null) {
 		
@@ -264,6 +254,20 @@ class pairs {
 	 * 
 	 * @return mixed
 	 * 
+	 */
+	
+	/**
+	 * Return all the data that matches a reference id (or/and) a particular pattern
+	 *
+	 * This method retrieves all reference data from the table that matches the specified reference ID and regular expression pattern (optional).
+	 *
+	 * If a reference ID is provided, any array containing reference data of the matching reference ID will be retrieved.
+	 * If a regular expression pattern is provided, only reference data with matching keys matching will be retrieved.
+	 *
+	 * @param int|null $ref The ID of the reference data to retrieve. Defaults to `null`.
+	 * @param string|null $regex The regular expression pattern to match against the keys. Defaults to `null`.
+	 * @return array An associative array containing the retrieved reference data. The keys of the array represent the reference data keys,
+	 * and the values can be of mixed types including strings, numbers, or arrays.
 	 */
 	public function all(?int $ref = null, ?string $regex = null) {
 		
